@@ -4,7 +4,7 @@ Usa ReportLab. Instalar: pip install reportlab
 """
 from io import BytesIO
 from decimal import Decimal
-
+from core.comprobantes.services import _monto_en_letras
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -55,6 +55,7 @@ def generar_pdf_comprobante(comprobante) -> bytes:
         ['Fecha de emisión:', str(comprobante.fecha_emision)],
         ['Cliente:', cliente.razon_social],
         [f'{cliente.get_tipo_documento_display()}:', cliente.numero_documento],
+        ['Tipo de Moneda:', comprobante.get_moneda_display()],
         ['Dirección:', cliente.direccion or '—'],
     ]
     tabla_cliente = Table(datos_cliente, colWidths=[4 * cm, 13 * cm])
@@ -104,10 +105,17 @@ def generar_pdf_comprobante(comprobante) -> bytes:
 
     # ── Totales ───────────────────────────────────────────────────────────────
     moneda = comprobante.moneda
+
+    if moneda in ('PEN', 'SOL', 'SOLES', 'S/'):
+        simbolo = 'S/.'
+    elif moneda in ('USD', 'DOLAR', 'DÓLAR', 'DOLARES', 'DÓLARES', '$'):
+        simbolo = '$'
+    else:
+        simbolo = moneda
     totales = [
-        ['Op. Gravadas:', f'{moneda} {comprobante.subtotal}'],
-        ['IGV (18%):', f'{moneda} {comprobante.igv}'],
-        ['TOTAL:', f'{moneda} {comprobante.total}'],
+        ['Op. Gravadas:', f'{simbolo} {comprobante.subtotal}'],
+        ['IGV (18%):', f'{simbolo} {comprobante.igv}'],
+        ['TOTAL:', f'{simbolo} {comprobante.total}'],
     ]
     tabla_tot = Table(totales, colWidths=[5 * cm, 3 * cm], hAlign='RIGHT')
     tabla_tot.setStyle(TableStyle([
@@ -119,7 +127,17 @@ def generar_pdf_comprobante(comprobante) -> bytes:
         ('LINEABOVE', (0, 2), (-1, 2), 1, colors.black),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]))
+
     elements.append(tabla_tot)
+    elements.append(Spacer(1, 1 * cm))
+
+    # ── Monto en letras ───────────────────────────────────────────────────────
+    monto_letras = _monto_en_letras(float(comprobante.total), comprobante.moneda)
+    texto_total_letras = Paragraph(
+        f"SON: {monto_letras}",
+        styles['Normal']
+    )
+    elements.append(texto_total_letras)
     elements.append(Spacer(1, 0.5 * cm))
 
     # ── Estado SUNAT ──────────────────────────────────────────────────────────

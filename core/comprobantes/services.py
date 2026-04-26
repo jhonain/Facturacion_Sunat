@@ -115,6 +115,8 @@ def _generar_xml(comprobante) -> bytes:
         listAgencyName='PE:SUNAT',
         listName='SUNAT:Identificador de Tipo de Documento',
         listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01',
+        listID='0101',
+        listSchemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51',
     )
     sub(
         root, 'cbc', 'Note',
@@ -126,35 +128,72 @@ def _generar_xml(comprobante) -> bytes:
     # Emisor
     supplier = sub(root, 'cac', 'AccountingSupplierParty')
     party_s = sub(supplier, 'cac', 'Party')
+
+    party_id_s = sub(party_s, 'cac', 'PartyIdentification')
+    sub(
+        party_id_s, 'cbc', 'ID', ruc_empresa,
+        schemeID='6',
+        schemeName='Documento de Identidad',
+        schemeAgencyName='PE:SUNAT',
+        schemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    )
+
     party_name_s = sub(party_s, 'cac', 'PartyName')
     sub(party_name_s, 'cbc', 'Name', comprobante.empresa.razon_social)
 
-    postal_s = sub(party_s, 'cac', 'PostalAddress')
-    sub(postal_s, 'cbc', 'ID', '150101')  # Ubigeo
-
-    # Dirección según orden UBL/SUNAT
-    sub(postal_s, 'cbc', 'StreetName', comprobante.empresa.direccion or 'SIN DIRECCION')
-    sub(postal_s, 'cbc', 'CitySubdivisionName', 'LIMA')   # Urbanización / zona
-    sub(postal_s, 'cbc', 'CityName', 'LIMA')
-    sub(postal_s, 'cbc', 'CountrySubentity', 'LIMA')      # Departamento
-    sub(postal_s, 'cbc', 'District', 'LIMA')
-    country_s = sub(postal_s, 'cac', 'Country')
-    sub(country_s, 'cbc', 'IdentificationCode', 'PE')
-
     party_tax_s = sub(party_s, 'cac', 'PartyTaxScheme')
     sub(party_tax_s, 'cbc', 'RegistrationName', comprobante.empresa.razon_social)
-    sub(party_tax_s, 'cbc', 'CompanyID', ruc_empresa, schemeID='6')
+    sub(
+        party_tax_s, 'cbc', 'CompanyID', ruc_empresa,
+        schemeID='6',
+        schemeName='SUNAT:Identificador de Documento de Identidad',
+        schemeAgencyName='PE:SUNAT',
+        schemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    )
+
+    reg_address = sub(party_tax_s, 'cac', 'RegistrationAddress')
+    sub(reg_address, 'cbc', 'AddressTypeCode', '0000',
+        listAgencyName='PE:SUNAT',
+        listName='Establecimientos anexos')
+
     tax_scheme_s = sub(party_tax_s, 'cac', 'TaxScheme')
-    sub(tax_scheme_s, 'cbc', 'ID', '6')
-    sub(tax_scheme_s, 'cbc', 'Name', 'RUC')
-    sub(tax_scheme_s, 'cbc', 'TaxTypeCode', 'VAT')
+    sub(tax_scheme_s, 'cbc', 'ID', '-')
 
     party_legal_s = sub(party_s, 'cac', 'PartyLegalEntity')
     sub(party_legal_s, 'cbc', 'RegistrationName', comprobante.empresa.razon_social)
 
+    reg_address_legal = sub(party_legal_s, 'cac', 'RegistrationAddress')
+    sub(reg_address_legal, 'cbc', 'ID', '150101',
+        schemeName='Ubigeos',
+        schemeAgencyName='PE:INEI')
+    sub(reg_address_legal, 'cbc', 'AddressTypeCode', '0000',
+        listAgencyName='PE:SUNAT',
+        listName='Establecimientos anexos')
+    sub(reg_address_legal, 'cbc', 'CitySubdivisionName', 'LIMA')
+    sub(reg_address_legal, 'cbc', 'CityName', 'LIMA')
+    sub(reg_address_legal, 'cbc', 'CountrySubentity', 'LIMA')
+    sub(reg_address_legal, 'cbc', 'District', 'LIMA')
+    address_line = sub(reg_address_legal, 'cac', 'AddressLine')
+    sub(address_line, 'cbc', 'Line', comprobante.empresa.direccion or 'SIN DIRECCION')
+    country_s = sub(reg_address_legal, 'cac', 'Country')
+    sub(country_s, 'cbc', 'IdentificationCode', 'PE',
+        listID='ISO 3166-1',
+        listAgencyName='United Nations Economic Commission for Europe',
+        listName='Country')
+
     # Cliente
     customer = sub(root, 'cac', 'AccountingCustomerParty')
     party_c = sub(customer, 'cac', 'Party')
+    
+    party_id_c = sub(party_c, 'cac', 'PartyIdentification')
+    sub(
+        party_id_c, 'cbc', 'ID', comprobante.cliente.numero_documento,
+        schemeID=comprobante.cliente.tipo_documento,
+        schemeName='Documento de Identidad',
+        schemeAgencyName='PE:SUNAT',
+        schemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    )
+    
     party_tax_c = sub(party_c, 'cac', 'PartyTaxScheme')
     sub(party_tax_c, 'cbc', 'RegistrationName', comprobante.cliente.razon_social)
     sub(
@@ -172,6 +211,11 @@ def _generar_xml(comprobante) -> bytes:
 
     party_legal_c = sub(party_c, 'cac', 'PartyLegalEntity')
     sub(party_legal_c, 'cbc', 'RegistrationName', comprobante.cliente.razon_social)
+
+    # Condiciones de pago (Contado)
+    payment_terms = sub(root, 'cac', 'PaymentTerms')
+    sub(payment_terms, 'cbc', 'ID', 'FormaPago')
+    sub(payment_terms, 'cbc', 'PaymentMeansID', 'Contado')
 
     # Impuestos
     tax_total = sub(root, 'cac', 'TaxTotal')
@@ -269,8 +313,17 @@ def _firmar_xml(xml_bytes: bytes) -> bytes:
 
     signature_id = "LlamaPeSign"
 
-    # Nodo UBL de firma
-    cac_sig = etree.SubElement(root, f'{{{CAC}}}Signature')
+    # Crear el Nodo UBL de firma pero sin agregarlo al final todavía
+    cac_sig = etree.Element(f'{{{CAC}}}Signature')
+
+    # Buscar la etiqueta AccountingSupplierParty para insertar la firma justo antes
+    supplier = root.find(f'.//{{{CAC}}}AccountingSupplierParty')
+    if supplier is not None:
+        index = root.index(supplier)
+        root.insert(index, cac_sig)
+    else:
+        root.append(cac_sig)
+
     cac_sig_id = etree.SubElement(cac_sig, f'{{{CBC}}}ID')
     cac_sig_id.text = signature_id
 
