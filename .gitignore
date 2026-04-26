@@ -6,3 +6,10 @@ __pycache__/
 *.pyc
 db.sqlite3
 .DS_Store
+
+# Certificados digitales — nunca subir al repositorio
+certs/
+*.pfx
+*.p12
+*.key
+*.crt

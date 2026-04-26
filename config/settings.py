@@ -5,7 +5,7 @@ import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-sys.path.insert(0, str(BASE_DIR)) 
+sys.path.insert(0, str(BASE_DIR))
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool)
@@ -125,7 +125,12 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # ── SUNAT ─────────────────────────────────────────────
-SUNAT_URL_BETA = config('SUNAT_URL_BETA')
-SUNAT_USUARIO_SOL = config('SUNAT_USUARIO_SOL', default='MODDATOS')
-SUNAT_CLAVE_SOL = config('SUNAT_CLAVE_SOL', default='moddatos')
-IGV_PORCENTAJE = 0.18
+SUNAT_URL_BETA       = config('SUNAT_URL_BETA')
+SUNAT_USUARIO_SOL    = config('SUNAT_USUARIO_SOL', default='MODDATOS')
+SUNAT_CLAVE_SOL      = config('SUNAT_CLAVE_SOL', default='moddatos')
+IGV_PORCENTAJE       = 0.18
+
+# ── Certificado digital ───────────────────────────────
+SUNAT_CERT_PATH      = BASE_DIR / config('SUNAT_CERT_PATH', default='core/certs/DEMO_Sunat.pfx')
+SUNAT_CERT_PASSWORD  = config('SUNAT_CERT_PASSWORD', default='')
+SUNAT_CERT_RUC       = config('SUNAT_CERT_RUC', default='')

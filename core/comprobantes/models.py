@@ -67,7 +67,7 @@ class Comprobante(models.Model):
     # Respuesta SUNAT
     sunat_ticket      = models.CharField(max_length=50, blank=True)
     sunat_cdr         = models.TextField(blank=True)
-    sunat_descripcion = models.CharField(max_length=500, blank=True)
+    sunat_descripcion = models.TextField(blank=True, default="")
 
     creado_en     = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
@@ -110,9 +110,9 @@ class DetalleComprobante(models.Model):
         related_name='detalles'
     )
     descripcion     = models.CharField(max_length=500)
-    cantidad        = models.DecimalField(max_digits=12, decimal_places=4)
+    cantidad        = models.PositiveIntegerField()
     unidad_medida   = models.CharField(max_length=10, default='NIU')
-    precio_unitario = models.DecimalField(max_digits=12, decimal_places=4)
+    precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
 
     # Campo requerimiento
     descuento       = models.DecimalField(
@@ -143,7 +143,7 @@ class LogEnvioSunat(models.Model):
     fecha_envio      = models.DateTimeField(auto_now_add=True)
     estado_respuesta = models.CharField(max_length=20)
     codigo_respuesta = models.CharField(max_length=10)
-    descripcion      = models.CharField(max_length=500)
+    descripcion = models.TextField(blank=True, default="")
 
     def __str__(self):
         return f"{self.comprobante} → {self.estado_respuesta}"
