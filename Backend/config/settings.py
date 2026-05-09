@@ -112,25 +112,25 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-# ── JWT ──────────────────────────────────────────────
+# JWT 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
-# ── CORS para React ───────────────────────────────────
+# CORS para React 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
-# ── SUNAT ─────────────────────────────────────────────
+# SUNAT 
 SUNAT_URL_BETA       = config('SUNAT_URL_BETA')
 SUNAT_USUARIO_SOL    = config('SUNAT_USUARIO_SOL', default='MODDATOS')
 SUNAT_CLAVE_SOL      = config('SUNAT_CLAVE_SOL', default='moddatos')
 IGV_PORCENTAJE       = 0.18
 
-# ── Certificado digital ───────────────────────────────
+# Certificado digital 
 SUNAT_CERT_PATH      = BASE_DIR / config('SUNAT_CERT_PATH', default='core/certs/DEMO_Sunat.pfx')
 SUNAT_CERT_PASSWORD  = config('SUNAT_CERT_PASSWORD', default='')
 SUNAT_CERT_RUC       = config('SUNAT_CERT_RUC', default='')

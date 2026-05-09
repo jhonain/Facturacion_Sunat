@@ -21,9 +21,7 @@ from requests import Session
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. Cargar certificado .pfx
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _cargar_certificado():
     """
@@ -44,9 +42,7 @@ def _cargar_certificado():
     return private_key, certificate, additional_certs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. Generar XML UBL 2.1 completo
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _generar_xml(comprobante) -> bytes:
     """
@@ -387,9 +383,7 @@ def _firmar_xml(xml_bytes: bytes) -> bytes:
     return signed_bytes
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 4. Empaquetar en ZIP
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _crear_zip(nombre_archivo: str, xml_firmado) -> bytes:
     """
@@ -560,9 +554,7 @@ def _parsear_cdr(cdr_xml: str) -> tuple:
         return '0', 'Aceptado'
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Funciones públicas
-# ─────────────────────────────────────────────────────────────────────────────
 
 def generar_xml_y_firmar(comprobante) -> bytes:
     """
@@ -649,10 +641,7 @@ def enviar_a_sunat(comprobante) -> dict:
         'ticket': comprobante.sunat_ticket,
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 7. Aliases de compatibilidad
-# ─────────────────────────────────────────────────────────────────────────────
 
 def generar_xml_mock(comprobante) -> str:
     """
@@ -671,10 +660,7 @@ def enviar_a_ose_mock(comprobante) -> dict:
     """
     return enviar_a_sunat(comprobante)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 8. Fallback
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _generar_xml_basico(comprobante) -> str:
     """XML mínimo sin firma — solo para desarrollo local."""
