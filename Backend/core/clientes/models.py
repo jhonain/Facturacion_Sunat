@@ -1,13 +1,8 @@
 from django.db import models
 from core.empresa.models import Empresa
+from config.choices import TipoDocumento
 
 class Cliente(models.Model):
-    class TipoDocumento(models.TextChoices):
-        RUC      = '6', 'RUC'
-        DNI      = '1', 'DNI'
-        CARNET   = '4', 'Carnet de Extranjería'
-        PASAPORTE = '7', 'Pasaporte'
-        SIN_DOC  = '-', 'Sin Documento'
 
     empresa         = models.ForeignKey(
         Empresa,
@@ -28,10 +23,10 @@ class Cliente(models.Model):
     creado_en        = models.DateTimeField(auto_now_add=True)
 
     def es_persona_juridica(self) -> bool:
-        return self.tipo_documento == self.TipoDocumento.RUC
+        return self.tipo_documento == TipoDocumento.RUC
 
     def es_persona_natural(self) -> bool:
-        return self.tipo_documento == self.TipoDocumento.DNI
+        return self.tipo_documento == TipoDocumento.DNI
 
     def __str__(self):
         return f"{self.numero_documento} - {self.razon_social}"

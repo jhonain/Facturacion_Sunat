@@ -5,6 +5,7 @@ Generación de XML UBL 2.1, firma XMLDSig y envío SOAP a SUNAT beta.
 import base64
 import zipfile
 import io
+import os
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -17,16 +18,32 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from lxml import etree
 from signxml import XMLSigner, methods
 from requests import Session
+from config.choices import EstadoComprobante
 
 logger = logging.getLogger(__name__)
+
+#guardar archivos en disco xml firmado, cdr y el pdf
+
+def guardar_archivo_disco(contenido, ruta_completa: str) -> str:
+
+    # Asegurar que el directorio existe
+    directorio = os.path.dirname(ruta_completa)
+    os.makedirs(directorio, exist_ok=True)
+    
+    # Guardar archivo
+    with open(ruta_completa, 'wb') as f:
+        if isinstance(contenido, str):
+            contenido = contenido.encode('utf-8')
+        f.write(contenido)
+    
+    # Retornar ruta relativa desde BASE_DIR (para la BD)
+    return os.path.relpath(ruta_completa, settings.BASE_DIR)
 
 
 # 1. Cargar certificado .pfx
 
 def _cargar_certificado():
-    """
-    Lee el .pfx y retorna (clave_privada, certificado, cadena).
-    """
+
     cert_path = Path(settings.BASE_DIR) / settings.SUNAT_CERT_PATH
     cert_pass = settings.SUNAT_CERT_PASSWORD.encode() if settings.SUNAT_CERT_PASSWORD else None
 
@@ -120,6 +137,19 @@ def _generar_xml(comprobante) -> bytes:
         languageLocaleID='1000'
     )
     sub(root, 'cbc', 'DocumentCurrencyCode', moneda)
+
+    # cac:Signature (nodo UBL, no la firma digital)
+    cac_sig = sub(root, 'cac', 'Signature')
+    sub(cac_sig, 'cbc', 'ID', 'LlamaPeSign')
+    signatory = sub(cac_sig, 'cac', 'SignatoryParty')
+    party_id_cont = sub(signatory, 'cac', 'PartyIdentification')
+    sub(party_id_cont, 'cbc', 'ID', ruc_empresa)
+    party_name_cont = sub(signatory, 'cac', 'PartyName')
+    sub(party_name_cont, 'cbc', 'Name', comprobante.empresa.razon_social)
+    dig_att = sub(cac_sig, 'cac', 'DigitalSignatureAttachment')
+    ext_ref = sub(dig_att, 'cac', 'ExternalReference')
+    sub(ext_ref, 'cbc', 'URI', '#LlamaPeSign')
+
 
     # Emisor
     supplier = sub(root, 'cac', 'AccountingSupplierParty')
@@ -277,9 +307,8 @@ def _generar_xml(comprobante) -> bytes:
     return etree.tostring(root, xml_declaration=True, encoding='UTF-8', pretty_print=False)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Firmar XML
-# ─────────────────────────────────────────────────────────────────────────────
+
+# 3. Firmar XML 
 
 def _firmar_xml(xml_bytes: bytes) -> bytes:
     """
@@ -308,34 +337,6 @@ def _firmar_xml(xml_bytes: bytes) -> bytes:
     root = etree.fromstring(xml_bytes)
 
     signature_id = "LlamaPeSign"
-
-    # Crear el Nodo UBL de firma pero sin agregarlo al final todavía
-    cac_sig = etree.Element(f'{{{CAC}}}Signature')
-
-    # Buscar la etiqueta AccountingSupplierParty para insertar la firma justo antes
-    supplier = root.find(f'.//{{{CAC}}}AccountingSupplierParty')
-    if supplier is not None:
-        index = root.index(supplier)
-        root.insert(index, cac_sig)
-    else:
-        root.append(cac_sig)
-
-    cac_sig_id = etree.SubElement(cac_sig, f'{{{CBC}}}ID')
-    cac_sig_id.text = signature_id
-
-    signatory = etree.SubElement(cac_sig, f'{{{CAC}}}SignatoryParty')
-    party_id_cont = etree.SubElement(signatory, f'{{{CAC}}}PartyIdentification')
-    party_id_el = etree.SubElement(party_id_cont, f'{{{CBC}}}ID')
-    party_id_el.text = settings.SUNAT_CERT_RUC
-
-    party_name_cont = etree.SubElement(signatory, f'{{{CAC}}}PartyName')
-    party_name_el = etree.SubElement(party_name_cont, f'{{{CBC}}}Name')
-    party_name_el.text = "EMPRESA"
-
-    dig_sig_att = etree.SubElement(cac_sig, f'{{{CAC}}}DigitalSignatureAttachment')
-    ext_ref = etree.SubElement(dig_sig_att, f'{{{CAC}}}ExternalReference')
-    uri_el = etree.SubElement(ext_ref, f'{{{CBC}}}URI')
-    uri_el.text = f"#{signature_id}"
 
     signer = XMLSigner(
         method=methods.enveloped,
@@ -398,9 +399,7 @@ def _crear_zip(nombre_archivo: str, xml_firmado) -> bytes:
     return buffer.getvalue()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. Enviar a SUNAT
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _enviar_soap(nombre_archivo: str, zip_bytes: bytes) -> dict:
     """
@@ -571,8 +570,16 @@ def generar_xml_y_firmar(comprobante) -> bytes:
     else:
         xml_firmado_texto = str(xml_firmado)
 
-    comprobante.xml_firmado = xml_firmado_texto
+    #Guardar XML firmado en disco
+    nombre_archivo = comprobante.nombre_archivo_sunat()
+    ruta_completa = os.path.join(settings.XML_FIRMADOS_DIR, f"{nombre_archivo}.xml")
+    
+    ruta_relativa = guardar_archivo_disco(xml_firmado_texto, ruta_completa)
+
+    comprobante.xml_firmado = ruta_relativa
     comprobante.save(update_fields=['xml_firmado'])
+
+    logger.info(f" XML firmado guardado en: {ruta_relativa}")
 
     return xml_firmado
 
@@ -616,15 +623,27 @@ def enviar_a_sunat(comprobante) -> dict:
     resultado = _enviar_soap(nombre_archivo, zip_bytes)
 
     nuevo_estado = (
-        comprobante.EstadoComprobante.ACEPTADO
+        EstadoComprobante.ACEPTADO
         if resultado['estado'] == 'ACEPTADO'
-        else comprobante.EstadoComprobante.RECHAZADO
+        else EstadoComprobante.RECHAZADO
     )
 
     comprobante.estado = nuevo_estado
     comprobante.sunat_ticket = f"INT-{comprobante.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
     comprobante.sunat_descripcion = resultado['descripcion']
-    comprobante.sunat_cdr = resultado.get('cdr_xml', '')
+
+    cdr_xml = resultado.get('cdr_xml', '')
+    if cdr_xml:
+        # Nombre del CDR según estándar SUNAT: R- + nombre_archivo + .xml
+        cdr_nombre = f"R-{nombre_archivo}.xml"
+        ruta_completa = os.path.join(settings.CDRS_DIR, cdr_nombre)
+        ruta_relativa = guardar_archivo_en_disco(cdr_xml, ruta_completa)
+        comprobante.sunat_cdr = ruta_relativa
+        logger.info(f"CDR guardado en: {ruta_relativa}")
+    else:
+        comprobante.sunat_cdr = ''
+
+    
     comprobante.save(update_fields=['estado', 'sunat_ticket', 'sunat_descripcion', 'sunat_cdr'])
 
     LogEnvioSunat.objects.create(
@@ -691,9 +710,7 @@ def _generar_xml_basico(comprobante) -> str:
 </Invoice>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 9. Monto en letras
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _monto_en_letras(monto: float, moneda: str) -> str:
     """Convierte monto numérico a letras en formato SUNAT."""
@@ -735,3 +752,37 @@ def _monto_en_letras(monto: float, moneda: str) -> str:
         return str(n)
 
     return f"SON {num_a_letras(entero)} Y {centavos:02d}/100 {moneda_texto}"
+
+
+def obtener_xml_firmado_disco(comprobante) -> str:
+    """
+    Lee el XML firmado desde disco.
+    """
+    if not comprobante.xml_firmado:
+        return None
+    
+    ruta_completa = os.path.join(settings.BASE_DIR, comprobante.xml_firmado)
+    
+    if not os.path.exists(ruta_completa):
+        logger.warning(f"Archivo XML no encontrado: {ruta_completa}")
+        return None
+    
+    with open(ruta_completa, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
+def obtener_cdr_disco(comprobante) -> str:
+    """
+    Lee el CDR desde disco.
+    """
+    if not comprobante.sunat_cdr:
+        return None
+    
+    ruta_completa = os.path.join(settings.BASE_DIR, comprobante.sunat_cdr)
+    
+    if not os.path.exists(ruta_completa):
+        logger.warning(f"Archivo CDR no encontrado: {ruta_completa}")
+        return None
+    
+    with open(ruta_completa, 'r', encoding='utf-8') as f:
+        return f.read()

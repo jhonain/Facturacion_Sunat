@@ -1,7 +1,7 @@
 from django.db import models
 
 from core.empresa.models import Empresa
-
+from config.choices import TipoAfectacionIGV
 
 class CategoriaProducto(models.Model):
 
@@ -25,11 +25,6 @@ class CategoriaProducto(models.Model):
 
 
 class Producto(models.Model):
-
-    class TipoAfectacionIGV(models.TextChoices):
-        GRAVADO_ONEROSA      = '10', 'Gravado - Operación Onerosa'
-        EXONERADO_ONEROSA    = '20', 'Exonerado - Operación Onerosa'
-        INAFECTO_ONEROSA     = '30', 'Inafecto - Operación Onerosa'
 
     empresa          = models.ForeignKey(
         Empresa,

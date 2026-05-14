@@ -4,25 +4,9 @@ from core.empresa.models import Empresa, SerieComprobante
 from core.clientes.models import Cliente
 from core.productos.models import Producto
 
+from config.choices import TipoComprobante, EstadoComprobante, MonedaComprobante, TipoNota
 
 class Comprobante(models.Model):
-
-    class TipoComprobante(models.TextChoices):
-        FACTURA      = '01', 'Factura Electrónica'
-        BOLETA       = '03', 'Boleta de Venta'
-        NOTA_CREDITO = '07', 'Nota de Crédito'
-        NOTA_DEBITO  = '08', 'Nota de Débito'
-
-    class EstadoComprobante(models.TextChoices):
-        BORRADOR  = 'BORRADOR',  'Borrador'
-        ENVIADO   = 'ENVIADO',   'Enviado a SUNAT'
-        ACEPTADO  = 'ACEPTADO',  'Aceptado por SUNAT'
-        RECHAZADO = 'RECHAZADO', 'Rechazado por SUNAT'
-        ANULADO   = 'ANULADO',   'Anulado'
-
-    class MonedaComprobante(models.TextChoices):
-        SOLES   = 'PEN', 'Soles'
-        DOLARES = 'USD', 'Dólares'
 
     empresa       = models.ForeignKey(
         Empresa,
@@ -73,16 +57,16 @@ class Comprobante(models.Model):
     actualizado_en = models.DateTimeField(auto_now=True)
 
     def es_factura(self) -> bool:
-        return self.tipo == self.TipoComprobante.FACTURA
+        return self.tipo == TipoComprobante.FACTURA
 
     def es_boleta(self) -> bool:
-        return self.tipo == self.TipoComprobante.BOLETA
+        return self.tipo == TipoComprobante.BOLETA
 
     def fue_aceptado(self) -> bool:
-        return self.estado == self.EstadoComprobante.ACEPTADO
+        return self.estado == EstadoComprobante.ACEPTADO
 
     def puede_anularse(self) -> bool:
-        return self.estado == self.EstadoComprobante.ACEPTADO
+        return self.estado == EstadoComprobante.ACEPTADO
 
     def nombre_archivo_sunat(self) -> str:
         return f"{self.empresa.ruc}-{self.tipo}-{self.serie.serie}-{self.numero:08d}"
@@ -155,17 +139,6 @@ class LogEnvioSunat(models.Model):
 
 
 class NotaCredito(models.Model):
-
-    class TipoNota(models.TextChoices):
-        ANULACION         = '01', 'Anulación de la operación'
-        ANULACION_RUC     = '02', 'Anulación por error en el RUC'
-        CORRECCION        = '03', 'Corrección por error en la descripción'
-        DESCUENTO_GLOBAL  = '04', 'Descuento global'
-        DESCUENTO_ITEM    = '05', 'Descuento por ítem'
-        DEVOLUCION_TOTAL  = '06', 'Devolución total'
-        DEVOLUCION_ITEM   = '07', 'Devolución por ítem'
-        BONIFICACION      = '08', 'Bonificación'
-        DISMINUCION_VALOR = '09', 'Disminución en el valor'
 
     comprobante_referencia = models.ForeignKey(
         Comprobante,

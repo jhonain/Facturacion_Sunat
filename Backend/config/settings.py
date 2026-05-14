@@ -2,7 +2,7 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 import sys
-
+import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(BASE_DIR))
@@ -134,3 +134,17 @@ IGV_PORCENTAJE       = 0.18
 SUNAT_CERT_PATH      = BASE_DIR / config('SUNAT_CERT_PATH', default='core/certs/DEMO_Sunat.pfx')
 SUNAT_CERT_PASSWORD  = config('SUNAT_CERT_PASSWORD', default='')
 SUNAT_CERT_RUC       = config('SUNAT_CERT_RUC', default='')
+
+# Ruta donde se guardarán los archivos PDF, XML, CDR
+MEDIA_ROOT = BASE_DIR / 'storage'
+
+# Directorios específicos 
+XML_FIRMADOS_DIR = MEDIA_ROOT / 'xmls' / 'firmados'
+CDRS_DIR = MEDIA_ROOT / 'cdrs'
+PDFS_DIR = MEDIA_ROOT / 'pdfs'
+
+# Crear directorios si no existen 
+for dir_path in [XML_FIRMADOS_DIR, CDRS_DIR, PDFS_DIR]:
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+MEDIA_URL = '/media/'

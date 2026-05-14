@@ -1,11 +1,7 @@
 from django.db import models
+from config.choices import RegimenTributario, TipoSerie
 
 class Empresa(models.Model):
-    class RegimenTributario(models.TextChoices):
-        GENERAL = 'RG',   'Régimen General'
-        ESPECIAL = 'RER', 'Régimen Especial de Renta'
-        MYPE     = 'RMT', 'Régimen MYPE Tributario'
-        NRUS     = 'NRUS','Nuevo RUS'
 
     ruc               = models.CharField(max_length=11, unique=True)
     razon_social      = models.CharField(max_length=200)
@@ -29,11 +25,6 @@ class Empresa(models.Model):
 
 
 class SerieComprobante(models.Model):
-
-    class TipoSerie(models.TextChoices):
-        FACTURA      = 'F',  'Factura'
-        BOLETA       = 'B',  'Boleta'
-        NOTA_CREDITO = 'FC', 'Nota de Crédito'
 
     empresa            = models.ForeignKey(
         Empresa,

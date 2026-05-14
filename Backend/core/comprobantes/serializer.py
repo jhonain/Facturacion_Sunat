@@ -6,11 +6,7 @@ from .models import Comprobante, DetalleComprobante, LogEnvioSunat, NotaCredito
 from core.clientes.models import Cliente
 from core.productos.models import Producto
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Detalle
-# ─────────────────────────────────────────────────────────────────────────────
-
 class DetalleComprobanteWriteSerializer(serializers.Serializer):
     """
     Recibe solo los datos que el usuario ingresa.
@@ -51,11 +47,7 @@ class DetalleComprobanteReadSerializer(serializers.ModelSerializer):
             'igv_linea', 'subtotal', 'total',
         ]
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Log SUNAT
-# ─────────────────────────────────────────────────────────────────────────────
-
 class LogEnvioSunatSerializer(serializers.ModelSerializer):
     class Meta:
         model  = LogEnvioSunat
@@ -63,11 +55,7 @@ class LogEnvioSunatSerializer(serializers.ModelSerializer):
                   'codigo_respuesta', 'descripcion']
         read_only_fields = fields
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Comprobante — Lectura
-# ─────────────────────────────────────────────────────────────────────────────
-
 class ComprobanteReadSerializer(serializers.ModelSerializer):
     detalles        = DetalleComprobanteReadSerializer(many=True, read_only=True)
     logs            = LogEnvioSunatSerializer(many=True, read_only=True)
@@ -97,10 +85,7 @@ class ComprobanteReadSerializer(serializers.ModelSerializer):
     def get_numero_completo(self, obj):
         return f"{obj.serie.serie}-{obj.numero:08d}"
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Comprobante — Escritura  (calcula IGV automáticamente)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class ComprobanteWriteSerializer(serializers.ModelSerializer):
     detalles = DetalleComprobanteWriteSerializer(many=True)
@@ -113,7 +98,7 @@ class ComprobanteWriteSerializer(serializers.ModelSerializer):
             'detalles',
         ]
 
-    # ── Validación: factura requiere RUC ─────────────────────────────────────
+    # Validación: factura requiere RUC 
     def validate(self, data):
         tipo    = data.get('tipo')
         cliente = data.get('cliente')
@@ -230,10 +215,7 @@ class ComprobanteWriteSerializer(serializers.ModelSerializer):
         return instance
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Nota de Crédito
-# ─────────────────────────────────────────────────────────────────────────────
-
 class NotaCreditoSerializer(serializers.ModelSerializer):
     tipo_nota_display = serializers.CharField(
         source='get_tipo_nota_display', read_only=True

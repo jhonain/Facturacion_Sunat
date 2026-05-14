@@ -13,15 +13,6 @@ class CategoriaProductoViewSet(viewsets.ModelViewSet):
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    """
-    CRUD de productos con búsqueda y filtros.
-
-    Filtros disponibles:
-        ?empresa=1
-        ?activo=true
-        ?tipo_afectacion_igv=10     → gravados
-        ?search=laptop              → busca en código y descripción
-    """
     queryset           = Producto.objects.select_related('empresa', 'categoria').all()
     serializer_class   = ProductoSerializer
     permission_classes = [IsAuthenticated]

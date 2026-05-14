@@ -15,19 +15,10 @@ from .serializer import (
 )
 from .services import enviar_a_ose_mock
 from .pdf import generar_pdf_comprobante
-
+from config.choices import EstadoComprobante,TipoComprobante
 
 class ComprobanteViewSet(viewsets.ModelViewSet):
-    """
-    CRUD de comprobantes + acciones especiales.
-
-    Filtros disponibles en GET /api/v1/comprobantes/:
-        ?tipo=01            → solo facturas (01=Factura, 03=Boleta, 07=NC)
-        ?estado=ACEPTADO    → por estado
-        ?fecha_desde=2025-01-01
-        ?fecha_hasta=2025-12-31
-        ?ruc_cliente=20601234567
-    """
+    
     queryset = Comprobante.objects.select_related(
         'empresa', 'serie', 'cliente'
     ).prefetch_related('detalles__producto', 'logs').all()
@@ -65,7 +56,7 @@ class ComprobanteViewSet(viewsets.ModelViewSet):
     # ── Bloquear eliminación de comprobantes ACEPTADOS ────────────────────────
     def destroy(self, request, *args, **kwargs):
         comprobante = self.get_object()
-        if comprobante.estado == Comprobante.EstadoComprobante.ACEPTADO:
+        if comprobante.estado == EstadoComprobante.ACEPTADO:
             return Response(
                 {'error': 'No se puede eliminar un comprobante ACEPTADO. Use una nota de crédito para anularlo.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -79,8 +70,8 @@ class ComprobanteViewSet(viewsets.ModelViewSet):
         comprobante = self.get_object()
 
         estados_no_enviables = [
-            Comprobante.EstadoComprobante.ACEPTADO,
-            Comprobante.EstadoComprobante.ANULADO,
+            EstadoComprobante.ACEPTADO,
+            EstadoComprobante.ANULADO,
         ]
         if comprobante.estado in estados_no_enviables:
             return Response(
@@ -88,7 +79,7 @@ class ComprobanteViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        comprobante.estado = Comprobante.EstadoComprobante.ENVIADO
+        comprobante.estado = EstadoComprobante.ENVIADO
         comprobante.save(update_fields=['estado'])
 
         resultado = enviar_a_ose_mock(comprobante)
@@ -100,13 +91,13 @@ class ComprobanteViewSet(viewsets.ModelViewSet):
         """Reenvía un comprobante que fue RECHAZADO."""
         comprobante = self.get_object()
 
-        if comprobante.estado != Comprobante.EstadoComprobante.RECHAZADO:
+        if comprobante.estado != EstadoComprobante.RECHAZADO:
             return Response(
                 {'error': 'Solo se pueden reenviar comprobantes en estado RECHAZADO.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        comprobante.estado = Comprobante.EstadoComprobante.ENVIADO
+        comprobante.estado = EstadoComprobante.ENVIADO
         comprobante.save(update_fields=['estado'])
 
         resultado = enviar_a_ose_mock(comprobante)
@@ -122,7 +113,7 @@ class ComprobanteViewSet(viewsets.ModelViewSet):
                 {'error': 'Solo se pueden anular comprobantes ACEPTADOS.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        comprobante.estado = Comprobante.EstadoComprobante.ANULADO
+        comprobante.estado = EstadoComprobante.ANULADO
         comprobante.save(update_fields=['estado'])
         return Response({'mensaje': 'Comprobante anulado correctamente.'})
 
@@ -152,7 +143,7 @@ class FacturaViewSet(viewsets.ModelViewSet):
         return Comprobante.objects.select_related(
             'empresa', 'serie', 'cliente'
         ).prefetch_related('detalles__producto', 'logs').filter(
-            tipo=Comprobante.TipoComprobante.FACTURA
+            tipo=TipoComprobante.FACTURA
         )
 
     def get_serializer_class(self):
@@ -161,7 +152,7 @@ class FacturaViewSet(viewsets.ModelViewSet):
         return ComprobanteWriteSerializer
 
     def perform_create(self, serializer):
-        serializer.save(tipo=Comprobante.TipoComprobante.FACTURA)
+        serializer.save(tipo=TipoComprobante.FACTURA)
 
 
 class BoletaViewSet(viewsets.ModelViewSet):
@@ -175,7 +166,7 @@ class BoletaViewSet(viewsets.ModelViewSet):
         return Comprobante.objects.select_related(
             'empresa', 'serie', 'cliente'
         ).prefetch_related('detalles__producto', 'logs').filter(
-            tipo=Comprobante.TipoComprobante.BOLETA
+            tipo=TipoComprobante.BOLETA
         )
 
     def get_serializer_class(self):
@@ -184,7 +175,7 @@ class BoletaViewSet(viewsets.ModelViewSet):
         return ComprobanteWriteSerializer
 
     def perform_create(self, serializer):
-        serializer.save(tipo=Comprobante.TipoComprobante.BOLETA)
+        serializer.save(tipo=TipoComprobante.BOLETA)
 
 
 # ── Nota de Crédito ───────────────────────────────────────────────────────────
