@@ -1,7 +1,3 @@
-"""
-services.py — Lógica de negocio de comprobantes
-Generación de XML UBL 2.1, firma XMLDSig y envío SOAP a SUNAT beta.
-"""
 import base64
 import zipfile
 import io
@@ -23,7 +19,6 @@ from config.choices import EstadoComprobante
 logger = logging.getLogger(__name__)
 
 #guardar archivos en disco xml firmado, cdr y el pdf
-
 def guardar_archivo_disco(contenido, ruta_completa: str) -> str:
 
     # Asegurar que el directorio existe
@@ -74,10 +69,15 @@ def _generar_xml(comprobante) -> bytes:
     serie_num = f"{comprobante.serie.serie}-{comprobante.numero:08d}"
 
     NS = {
-        None: 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
+        None:  'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
         'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
         'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
-        'ext': 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2',
+        'ccts': 'urn:un:unece:uncefact:documentation:2',
+        'ds':   'http://www.w3.org/2000/09/xmldsig#',
+        'ext':  'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2',
+        'qdt':  'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2',
+        'udt':  'urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2',
+        'xsi':  'http://www.w3.org/2001/XMLSchema-instance',
     }
 
     def sub(parent, ns_prefix, tag, text=None, **attribs):
@@ -125,16 +125,15 @@ def _generar_xml(comprobante) -> bytes:
     sub(root, 'cbc', 'IssueTime', hora_emision)
     sub(
         root, 'cbc', 'InvoiceTypeCode', comprobante.tipo,
+        listID="0101",
         listAgencyName='PE:SUNAT',
         listName='SUNAT:Identificador de Tipo de Documento',
         listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01',
-        listID='0101',
-        listSchemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51',
+        listSchemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51'
     )
     sub(
         root, 'cbc', 'Note',
-        _monto_en_letras(float(comprobante.total), moneda),
-        languageLocaleID='1000'
+        _monto_en_letras(float(comprobante.total), moneda)
     )
     sub(root, 'cbc', 'DocumentCurrencyCode', moneda)
 
@@ -367,12 +366,10 @@ def _firmar_xml(xml_bytes: bytes) -> bytes:
 
     signed_bytes = etree.tostring(
         signed_root,
-        xml_declaration=False,
-        encoding='unicode',
+        xml_declaration=True,
+        encoding='UTF-8',
         pretty_print=False,
-    ).encode('UTF-8')
-
-    signed_bytes = b"<?xml version='1.0' encoding='UTF-8'?>\n" + signed_bytes
+    )
 
     # Quitar saltos de línea en el certificado
     signed_bytes = re.sub(
@@ -446,7 +443,7 @@ def _enviar_soap(nombre_archivo: str, zip_bytes: bytes) -> dict:
         endpoint = wsdl_url.replace('?wsdl', '')
         headers = {
             'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': 'urn:sendBill',
+            'SOAPAction': '',
         }
 
         print("ENDPOINT:", endpoint)
@@ -462,7 +459,7 @@ def _enviar_soap(nombre_archivo: str, zip_bytes: bytes) -> dict:
         print("HTTP STATUS:", resp.status_code)
         print("RESPONSE COMPLETO:", resp.text[:2000])
 
-        if resp.status_code != 200:
+        if resp.status_code not in (200, 500):
             return {
                 'estado': 'RECHAZADO',
                 'codigo': str(resp.status_code),
@@ -470,15 +467,31 @@ def _enviar_soap(nombre_archivo: str, zip_bytes: bytes) -> dict:
                 'cdr_xml': '',
             }
 
-        root_resp = etree.fromstring(resp.content)
-
-        fault_str = root_resp.find('.//{http://schemas.xmlsoap.org/soap/envelope/}faultstring')
-        fault_code = root_resp.find('.//{http://schemas.xmlsoap.org/soap/envelope/}faultcode')
-        if fault_str is not None:
+        try:
+            root_resp = etree.fromstring(resp.content)
+        except Exception:
             return {
                 'estado': 'RECHAZADO',
-                'codigo': fault_code.text.split('.')[-1] if fault_code is not None and fault_code.text else '9999',
-                'descripcion': fault_str.text or 'Error SOAP SUNAT',
+                'codigo': str(resp.status_code),
+                'descripcion': f'Error HTTP {resp.status_code}: {resp.text[:300]}',
+                'cdr_xml': '',
+            }
+
+        # SUNAT devuelve <faultstring> SIN namespace; buscar con y sin namespace
+        fault_str = root_resp.find('.//{http://schemas.xmlsoap.org/soap/envelope/}faultstring')
+        if fault_str is None:
+            fault_str = root_resp.find('.//faultstring')
+        fault_code = root_resp.find('.//{http://schemas.xmlsoap.org/soap/envelope/}faultcode')
+        if fault_code is None:
+            fault_code = root_resp.find('.//faultcode')
+
+        if fault_str is not None:
+            codigo_raw = fault_code.text if fault_code is not None and fault_code.text else '9999'
+            codigo_num = codigo_raw.split('.')[-1]
+            return {
+                'estado': 'RECHAZADO',
+                'codigo': codigo_num,
+                'descripcion': f'SUNAT: {fault_str.text or "Error SOAP"}',
                 'cdr_xml': '',
             }
 
@@ -489,6 +502,7 @@ def _enviar_soap(nombre_archivo: str, zip_bytes: bytes) -> dict:
             cdr_b64_el = root_resp.find('.//{http://service.sunat.gob.pe}return')
 
         if cdr_b64_el is None or not cdr_b64_el.text:
+
             return {
                 'estado': 'RECHAZADO',
                 'codigo': '9998',
@@ -556,30 +570,22 @@ def _parsear_cdr(cdr_xml: str) -> tuple:
 # 6. Funciones públicas
 
 def generar_xml_y_firmar(comprobante) -> bytes:
-    """
-    Genera el XML UBL 2.1 completo y lo firma con el .pfx.
-    """
+
     xml_bytes = _generar_xml(comprobante)
     xml_firmado = _firmar_xml(xml_bytes)
 
-    print("TIPO XML_FIRMADO:", type(xml_firmado))
-    print("PRIMEROS BYTES:", xml_firmado[:100] if isinstance(xml_firmado, bytes) else str(xml_firmado)[:100])
-
-    if isinstance(xml_firmado, bytes):
-        xml_firmado_texto = xml_firmado.decode('utf-8', errors='replace')
-    else:
-        xml_firmado_texto = str(xml_firmado)
-
-    #Guardar XML firmado en disco
+    # Guardar XML firmado en disco
     nombre_archivo = comprobante.nombre_archivo_sunat()
     ruta_completa = os.path.join(settings.XML_FIRMADOS_DIR, f"{nombre_archivo}.xml")
-    
-    ruta_relativa = guardar_archivo_disco(xml_firmado_texto, ruta_completa)
 
-    comprobante.xml_firmado = ruta_relativa
+    # Guardar directamente los bytes (no convertir a texto)
+    guardar_archivo_disco(xml_firmado, ruta_completa)
+
+    # Guardar solo el nombre del archivo en la BD
+    comprobante.xml_firmado = f"{nombre_archivo}.xml"
     comprobante.save(update_fields=['xml_firmado'])
 
-    logger.info(f" XML firmado guardado en: {ruta_relativa}")
+    logger.info(f"XML firmado guardado en: {ruta_completa}")
 
     return xml_firmado
 
@@ -637,7 +643,7 @@ def enviar_a_sunat(comprobante) -> dict:
         # Nombre del CDR según estándar SUNAT: R- + nombre_archivo + .xml
         cdr_nombre = f"R-{nombre_archivo}.xml"
         ruta_completa = os.path.join(settings.CDRS_DIR, cdr_nombre)
-        ruta_relativa = guardar_archivo_en_disco(cdr_xml, ruta_completa)
+        ruta_relativa = guardar_archivo_disco(cdr_xml, ruta_completa)
         comprobante.sunat_cdr = ruta_relativa
         logger.info(f"CDR guardado en: {ruta_relativa}")
     else:
@@ -761,7 +767,7 @@ def obtener_xml_firmado_disco(comprobante) -> str:
     if not comprobante.xml_firmado:
         return None
     
-    ruta_completa = os.path.join(settings.BASE_DIR, comprobante.xml_firmado)
+    ruta_completa = os.path.join(settings.XML_FIRMADOS_DIR, comprobante.xml_firmado)
     
     if not os.path.exists(ruta_completa):
         logger.warning(f"Archivo XML no encontrado: {ruta_completa}")
@@ -778,7 +784,7 @@ def obtener_cdr_disco(comprobante) -> str:
     if not comprobante.sunat_cdr:
         return None
     
-    ruta_completa = os.path.join(settings.BASE_DIR, comprobante.sunat_cdr)
+    ruta_completa = os.path.join(settings.CDRS_DIR, comprobante.sunat_cdr)
     
     if not os.path.exists(ruta_completa):
         logger.warning(f"Archivo CDR no encontrado: {ruta_completa}")

@@ -5,6 +5,8 @@ from rest_framework import serializers
 from .models import Comprobante, DetalleComprobante, LogEnvioSunat, NotaCredito
 from core.clientes.models import Cliente
 from core.productos.models import Producto
+from config.choices import TipoComprobante, EstadoComprobante, TipoDocumento
+from .services import generar_xml_mock, enviar_a_sunat # import local para evitar circular
 
 # Detalle
 class DetalleComprobanteWriteSerializer(serializers.Serializer):
@@ -89,13 +91,15 @@ class ComprobanteReadSerializer(serializers.ModelSerializer):
 
 class ComprobanteWriteSerializer(serializers.ModelSerializer):
     detalles = DetalleComprobanteWriteSerializer(many=True)
-
+    #para enviar de inmediato a sunat
+    enviar_ahora_sunat = serializers.BooleanField(required=False, default=False)
+    
     class Meta:
         model  = Comprobante
         fields = [
             'empresa', 'serie', 'cliente', 'tipo',
             'fecha_emision', 'moneda',
-            'detalles',
+            'detalles','enviar_ahora_sunat'
         ]
 
     # Validación: factura requiere RUC 
@@ -103,8 +107,8 @@ class ComprobanteWriteSerializer(serializers.ModelSerializer):
         tipo    = data.get('tipo')
         cliente = data.get('cliente')
 
-        if tipo == Comprobante.TipoComprobante.FACTURA:
-            if cliente.tipo_documento != Cliente.TipoDocumento.RUC:
+        if tipo == TipoComprobante.FACTURA:
+            if cliente.tipo_documento != TipoDocumento.RUC:
                 raise serializers.ValidationError(
                     {'cliente': 'La factura solo puede emitirse a clientes con RUC.'}
                 )
@@ -162,9 +166,9 @@ class ComprobanteWriteSerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data):
-        from .services import generar_xml_mock  # import local para evitar circular
 
         detalles_raw  = validated_data.pop('detalles')
+        enviar = validated_data.pop('enviar_ahora_sunat', False)
         detalles_calc = [self._calcular_detalle(d) for d in detalles_raw]
         totales       = self._calcular_totales(detalles_calc)
 
@@ -176,21 +180,25 @@ class ComprobanteWriteSerializer(serializers.ModelSerializer):
             **validated_data,
             numero=numero,
             **totales,
+            estado=EstadoComprobante.BORRADOR,
         )
 
         for det in detalles_calc:
             DetalleComprobante.objects.create(comprobante=comprobante, **det)
 
-        # Generar XML mock (firma simulada)
-        comprobante.xml_firmado = generar_xml_mock(comprobante)
-        comprobante.estado      = Comprobante.EstadoComprobante.BORRADOR
-        comprobante.save(update_fields=['xml_firmado', 'estado'])
+        generar_xml_mock(comprobante)
+
+        if enviar:
+            comprobante.estado = EstadoComprobante.ENVIADO
+            comprobante.save(update_fields=['estado'])
+            resultado = enviar_a_sunat(comprobante)
+            comprobante.resultado = resultado
 
         return comprobante
 
     def update(self, instance, validated_data):
         # No se puede editar un comprobante ya aceptado
-        if instance.estado == Comprobante.EstadoComprobante.ACEPTADO:
+        if instance.estado == EstadoComprobante.ACEPTADO:
             raise serializers.ValidationError(
                 'No se puede modificar un comprobante ACEPTADO.'
             )
@@ -234,7 +242,7 @@ class NotaCreditoSerializer(serializers.ModelSerializer):
         monto_afectado = data.get('monto_afectado')
 
         # El comprobante referenciado debe estar ACEPTADO
-        if referencia and referencia.estado != Comprobante.EstadoComprobante.ACEPTADO:
+        if referencia and referencia.estado != EstadoComprobante.ACEPTADO:
             raise serializers.ValidationError(
                 {'comprobante_referencia': 'Solo se puede emitir nota de crédito sobre comprobantes ACEPTADOS.'}
             )

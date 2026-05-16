@@ -51,7 +51,7 @@ class Producto(models.Model):
     creado_en        = models.DateTimeField(auto_now_add=True)
 
     def tiene_igv(self) -> bool:
-        return self.tipo_afectacion_igv == self.TipoAfectacionIGV.GRAVADO_ONEROSA
+        return self.tipo_afectacion_igv == TipoAfectacionIGV.GRAVADO_ONEROSA
 
     def precio_con_igv(self) -> float:
         from django.conf import settings
